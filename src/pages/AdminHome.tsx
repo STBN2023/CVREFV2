@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, Building2, Settings, Shield, FileSpreadsheet, Database } from "lucide-react";
+import { Users, Building2, Settings, Shield, FileSpreadsheet, Database, GitBranch } from "lucide-react";
 
 function AdminHome() {
   const navigate = useNavigate();
@@ -42,6 +42,15 @@ function AdminHome() {
       color: "bg-red-50 border-red-200 hover:bg-red-100",
       iconColor: "text-red-600",
       features: ["RAZ sécurisée", "Exports globaux", "Maintenance DB"]
+    },
+    {
+      title: "Mises à jour",
+      description: "Vérifier et appliquer les mises à jour depuis GitHub.",
+      icon: GitBranch,
+      path: "/admin/updates",
+      color: "bg-cyan-50 border-cyan-200 hover:bg-cyan-100",
+      iconColor: "text-cyan-600",
+      features: ["Vérifier les mises à jour", "Appliquer depuis GitHub", "Historique des commits"]
     }
   ];
 

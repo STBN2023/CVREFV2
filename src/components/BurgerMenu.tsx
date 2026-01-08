@@ -21,7 +21,7 @@ const NAV_SECTIONS = [
       { to: "/admin/salaries", label: "Gestion Salariés" },
       { to: "/admin/references", label: "Gestion Références" },
       { to: "/admin/tools", label: "Outils Admin" },
-      // Lien Debug CV retiré
+      { to: "/admin/updates", label: "Mises à jour" },
     ]
   },
   {

@@ -27,6 +27,7 @@ import AdminMaintenance from "./pages/AdminMaintenance";
 import AdminConfig from "./pages/AdminConfig";
 import AdminExports from "./pages/AdminExports";
 import AutoBackup from "@/components/AutoBackup";
+import AdminUpdates from "./pages/AdminUpdates";
 
 const queryClient = new QueryClient();
 
@@ -59,6 +60,7 @@ const App = () => (
               <Route path="/admin/maintenance" element={<AdminMaintenance />} />
               <Route path="/admin/config" element={<AdminConfig />} />
               <Route path="/admin/exports" element={<AdminExports />} />
+              <Route path="/admin/updates" element={<AdminUpdates />} />
               <Route path="/debug-cv" element={<DebugCv />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />

@@ -83,6 +83,9 @@ registerDownloadRoutes(app, { downloadsDir, safeFilename, SOFFICE_PATH });
 // AJOUT: debug endpoints
 registerDebugRoutes(app);
 
+// AJOUT: git endpoints pour mises à jour à distance
+registerGitRoutes(app);
+
 app.listen(PORT, async () => {
   console.log('\n🚀 ===== BACKEND CV ENRICHMENT =====');
   console.log(`🌐 http://localhost:${PORT}`);
