@@ -1,45 +1,26 @@
 @echo off
-setlocal enabledelayedexpansion
+echo ========================================
+echo   Demarrage de l'application CV REF
+echo ========================================
+echo.
 
-set FRONT_PORT=8080
-set BACKEND_DIR=server
+:: Démarrer le backend dans une nouvelle fenêtre
+echo [1/2] Demarrage du serveur backend (port 4000)...
+start "Backend CV REF" cmd /k "cd /d %~dp0server && npm start"
 
-REM --- lancer backend ---
-start "backend" /min cmd /c "cd %BACKEND_DIR% && npm run start"
-for /f "tokens=2 delims==; " %%a in ('wmic process where "windowtitle='backend'" get processid /value ^| find "="') do set BACK_PID=%%a
+:: Attendre 2 secondes pour laisser le backend démarrer
+timeout /t 2 /nobreak > nul
 
-REM --- lancer frontend ---
-start "frontend" /min cmd /c "npm run dev"
-for /f "tokens=2 delims==; " %%a in ('wmic process where "windowtitle='frontend'" get processid /value ^| find "="') do set FRONT_PID=%%a
+:: Démarrer le frontend dans une nouvelle fenêtre
+echo [2/2] Demarrage du frontend (Vite)...
+start "Frontend CV REF" cmd /k "cd /d %~dp0 && npm run dev"
 
-REM --- attendre que le front écoute sur :8080 ---
-set COUNT=0
-:WAITLOOP
->nul 2>&1 (netstat -ano | findstr :%FRONT_PORT% | find "LISTENING")
-if errorlevel 1 (
-  if %COUNT% geq 30 (
-    echo Timeout en attendant le port %FRONT_PORT%
-    goto END
-  )
-  set /a COUNT+=1
-  timeout /t 1 >nul
-  goto WAITLOOP
-)
-
-REM --- ouvrir navigateur ---
-start "" http://localhost:%FRONT_PORT%/
-
-REM --- attendre fin du front ---
-:WAITFRONT
-tasklist /FI "PID eq %FRONT_PID%" | find "%FRONT_PID%" >nul
-if not errorlevel 1 (
-  timeout /t 2 >nul
-  goto WAITFRONT
-)
-
-REM --- tuer backend quand le front s'arrête ---
-taskkill /PID %BACK_PID% /F >nul 2>&1
-
-:END
-endlocal
-exit /b
+echo.
+echo ========================================
+echo   Les deux serveurs sont en cours de demarrage
+echo   - Backend: http://localhost:4000
+echo   - Frontend: http://localhost:5173
+echo ========================================
+echo.
+echo Vous pouvez fermer cette fenetre.
+pause
