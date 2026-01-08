@@ -1,3 +1,11 @@
-Set WshShell = CreateObject("WScript.Shell")
-WshShell.CurrentDirectory = CreateObject("Scripting.FileSystemObject").GetParentFolderName(WScript.ScriptFullName)
-WshShell.Run "start-app.bat", 0, False
+Set objShell = CreateObject("WScript.Shell")
+Set objFSO = CreateObject("Scripting.FileSystemObject")
+
+' Obtenir le repertoire du script
+strPath = objFSO.GetParentFolderName(WScript.ScriptFullName)
+
+' Changer le repertoire courant
+objShell.CurrentDirectory = strPath
+
+' Lancer le batch
+objShell.Run "start-app.bat", 1, False
