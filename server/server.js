@@ -22,6 +22,7 @@ const { registerImportRoutes } = require('./routes/imports');
 const { registerAdminDbRoutes } = require('./routes/admin-db');
 // AJOUT: debug routes
 const { registerDebugRoutes } = require('./routes/debug');
+const { registerGitRoutes } = require('./routes/git');
 
 const SOFFICE_PATH = process.env.SOFFICE_PATH || 'soffice';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin';
