@@ -1,2 +1,3 @@
-Set sh = CreateObject("WScript.Shell")
-sh.Run "C:\Users\Admin\dyad-apps\sleepy-parrot-hop\start-app.bat", 0, False
+Set WshShell = CreateObject("WScript.Shell")
+WshShell.CurrentDirectory = CreateObject("Scripting.FileSystemObject").GetParentFolderName(WScript.ScriptFullName)
+WshShell.Run "start-app.bat", 0, False
