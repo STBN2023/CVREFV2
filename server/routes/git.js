@@ -124,14 +124,20 @@ const registerGitRoutes = (app) => {
     try {
       const limit = parseInt(req.query.limit) || 10;
       
-      // Utiliser un séparateur unique pour parser les commits
-      const separator = '|||COMMIT_SEP|||';
-      const format = `--pretty=format:%H${separator}%s${separator}%an${separator}%ci${separator}`;
-      const result = await execPromise(`git log -${limit} ${format}`);
+      // Format plus simple et robuste pour parser les commits
+      const result = await execPromise(
+        `git log -${limit} --pretty=format:"%H|%s|%an|%ci"`,
+        { encoding: 'utf8' }
+      );
       
-      const lines = result.stdout.trim().split('\n').filter(line => line.trim());
-      const commits = lines.map(line => {
-        const parts = line.split(separator);
+      const output = result.stdout.trim();
+      
+      if (!output) {
+        return res.json({ commits: [] });
+      }
+      
+      const commits = output.split('\n').map(line => {
+        const parts = line.split('|');
         return {
           hash: parts[0] || '',
           message: parts[1] || '',
