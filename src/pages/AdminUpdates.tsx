@@ -37,6 +37,7 @@ export default function AdminUpdates() {
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(false);
   const [pulling, setPulling] = useState(false);
+  const [updateComplete, setUpdateComplete] = useState(false);
 
   const loadGitStatus = async () => {
     setLoading(true);
@@ -82,14 +83,14 @@ export default function AdminUpdates() {
     try {
       const r = await fetch(`${BACKEND_URL}/api/admin/git/pull`, { method: "POST" });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      showSuccess("Mises à jour appliquées ! Redémarrage en cours...");
-      // Attendre un peu puis recharger
-      setTimeout(() => window.location.reload(), 3000);
+      dismissToast(String(t));
+      setUpdateComplete(true);
+      showSuccess("Mises à jour appliquées avec succès !");
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "inconnue";
       showError(`Erreur: ${message}`);
-    } finally {
       dismissToast(String(t));
+    } finally {
       setPulling(false);
     }
   };
@@ -112,6 +113,48 @@ export default function AdminUpdates() {
 
   return (
     <div className="max-w-5xl mx-auto py-8 px-4">
+      {/* Message de redémarrage après mise à jour */}
+      {updateComplete && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-8 max-w-md mx-4 shadow-2xl">
+            <div className="flex flex-col items-center text-center">
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
+                <CheckCircle className="h-10 w-10 text-green-600" />
+              </div>
+              <h2 className="text-2xl font-bold text-gray-800 mb-2">
+                Mise à jour terminée !
+              </h2>
+              <p className="text-gray-600 mb-6">
+                Les mises à jour ont été appliquées avec succès.
+                <br /><br />
+                <strong className="text-gray-800">
+                  Veuillez fermer complètement l'application et la redémarrer
+                </strong>
+                <br />
+                pour que les changements prennent effet.
+              </p>
+              <div className="flex flex-col gap-3 w-full">
+                <Button 
+                  onClick={() => window.close()}
+                  className="bg-brand-blue hover:bg-brand-blue/90 text-white"
+                >
+                  Fermer l'application
+                </Button>
+                <Button 
+                  variant="outline"
+                  onClick={() => setUpdateComplete(false)}
+                >
+                  Continuer sans redémarrer
+                </Button>
+              </div>
+              <p className="text-sm text-gray-500 mt-4">
+                Si le bouton "Fermer" ne fonctionne pas, fermez manuellement la fenêtre.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="mb-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
