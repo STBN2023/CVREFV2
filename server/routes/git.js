@@ -41,20 +41,26 @@ const registerGitRoutes = (app) => {
     try {
       console.log('🔄 Checking for updates in:', PROJECT_ROOT);
       
-      // Fetch les dernières infos du remote
-      await gitExec('git fetch origin');
-      
-      const local = await gitExec('git rev-parse HEAD');
-      
-      // Déterminer la branche actuelle pour comparer avec le bon remote
+      // Déterminer la branche actuelle
       const branchResult = await gitExec('git rev-parse --abbrev-ref HEAD');
       const currentBranch = branchResult.stdout.trim();
       
       console.log('📌 Current branch:', currentBranch);
       
+      // Fetch avec force pour éviter les problèmes de cache
+      await gitExec(`git fetch origin ${currentBranch}:refs/remotes/origin/${currentBranch} --force`);
+      
+      const local = await gitExec('git rev-parse HEAD');
+      
+      // Déterminer la branche actuelle pour comparer avec le bon remote
+      const branchResult2 = await gitExec('git rev-parse --abbrev-ref HEAD');
+      const currentBranch2 = branchResult2.stdout.trim();
+      
+      console.log('📌 Current branch:', currentBranch2);
+      
       // Essayer origin/[branche actuelle] puis origin/main puis origin/master
       let remote;
-      let remoteBranch = `origin/${currentBranch}`;
+      let remoteBranch = `origin/${currentBranch2}`;
       try {
         remote = await gitExec(`git rev-parse ${remoteBranch}`);
         console.log('✅ Found remote branch:', remoteBranch);
