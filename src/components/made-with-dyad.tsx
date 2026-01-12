@@ -10,8 +10,9 @@ export const MadeWithDyad = () => {
         Outils construit pour le GROUPE ISOEDRE 
       </a>
       <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-        Version 2.1
+        Version 2.X
       </p>
     </div>
   );
 };
+
