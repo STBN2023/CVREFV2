@@ -5,6 +5,8 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import type { Salarie } from "./types";
 
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:4000";
+
 type Props = {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -40,7 +42,27 @@ export default function SalarieFormDialog({
     competences: [],
   });
 
+  const [loadingCompetences, setLoadingCompetences] = useState(false);
+
   useEffect(() => {
+    if (!open) return;
+
+    const loadSalarieCompetences = async (salarieId: string) => {
+      setLoadingCompetences(true);
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/salaries/${salarieId}/competences`);
+        if (res.ok) {
+          const data = await res.json();
+          const competenceNames = (data.competences || []).map((c: any) => c.nom);
+          setForm((f) => ({ ...f, competences: competenceNames }));
+        }
+      } catch (e) {
+        console.error("Erreur chargement compétences:", e);
+      } finally {
+        setLoadingCompetences(false);
+      }
+    };
+
     if (mode === "edit" && initial) {
       const { id: _id, template: _t, ...rest } = initial;
       setForm({
@@ -52,8 +74,12 @@ export default function SalarieFormDialog({
         actif: !!rest.actif,
         email: rest.email || "",
         telephone: rest.telephone || "",
-        competences: rest.competences || [],
+        competences: [], // On va charger depuis l'API
       });
+      // Charger les compétences depuis l'API
+      if (initial.id) {
+        loadSalarieCompetences(initial.id);
+      }
     } else if (mode === "create") {
       setForm({
         nom: "",
@@ -77,7 +103,7 @@ export default function SalarieFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent aria-describedby={undefined} className="max-w-md">
+      <DialogContent aria-describedby={undefined} className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{mode === "create" ? "Ajouter un salarié" : "Modifier le salarié"}</DialogTitle>
           <DialogDescription>
@@ -161,32 +187,44 @@ export default function SalarieFormDialog({
 
           <div>
             <Label>Compétences (multi‑choix)</Label>
-            <div className="mt-1 grid grid-cols-2 gap-2">
-              {competencesRef.map((c) => {
-                const checked = (form.competences || []).includes(c);
-                return (
-                  <label key={c} className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={(e) => {
-                        setForm((f) => {
-                          const curr = new Set(f.competences || []);
-                          if (e.target.checked) curr.add(c);
-                          else curr.delete(c);
-                          return { ...f, competences: Array.from(curr) };
-                        });
-                      }}
-                      className="rounded border-gray-300"
-                    />
-                    {c}
-                  </label>
-                );
-              })}
-              {competencesRef.length === 0 && (
-                <div className="text-xs text-gray-500">Aucune compétence définie dans les référentiels.</div>
-              )}
-            </div>
+            {loadingCompetences ? (
+              <div className="mt-1 text-sm text-gray-500 flex items-center gap-2">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                Chargement des compétences...
+              </div>
+            ) : (
+              <div className="mt-1 grid grid-cols-2 gap-2 max-h-40 overflow-y-auto border rounded-md p-2">
+                {competencesRef.map((c) => {
+                  const checked = (form.competences || []).includes(c);
+                  return (
+                    <label key={c} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-gray-50 p-1 rounded">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => {
+                          setForm((f) => {
+                            const curr = new Set(f.competences || []);
+                            if (e.target.checked) curr.add(c);
+                            else curr.delete(c);
+                            return { ...f, competences: Array.from(curr) };
+                          });
+                        }}
+                        className="rounded border-gray-300"
+                      />
+                      {c}
+                    </label>
+                  );
+                })}
+                {competencesRef.length === 0 && (
+                  <div className="text-xs text-gray-500 col-span-2">Aucune compétence définie dans les référentiels.</div>
+                )}
+              </div>
+            )}
+            {!loadingCompetences && (form.competences || []).length > 0 && (
+              <div className="mt-1 text-xs text-gray-500">
+                {(form.competences || []).length} compétence(s) sélectionnée(s)
+              </div>
+            )}
           </div>
 
           <div className="flex items-center space-x-2">
@@ -205,7 +243,7 @@ export default function SalarieFormDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Annuler
           </Button>
-          <Button onClick={handleSubmit} disabled={!form.nom.trim() || !form.prenom.trim()}>
+          <Button onClick={handleSubmit} disabled={!form.nom.trim() || !form.prenom.trim() || loadingCompetences}>
             {mode === "create" ? "Ajouter" : "Modifier"}
           </Button>
         </DialogFooter>
