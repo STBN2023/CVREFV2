@@ -136,13 +136,14 @@ export default function AdminUpdates() {
               <div className="flex flex-col gap-3 w-full">
                 <Button 
                   onClick={() => window.close()}
-                  className="bg-brand-blue hover:bg-brand-blue/90 text-white"
+                  className="bg-green-600 hover:bg-green-700 text-white font-semibold shadow-md"
                 >
                   Fermer l'application
                 </Button>
                 <Button 
                   variant="outline"
                   onClick={() => setUpdateComplete(false)}
+                  className="border-gray-300 text-gray-700 hover:bg-gray-100 font-medium"
                 >
                   Continuer sans redémarrer
                 </Button>
