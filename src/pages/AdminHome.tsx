@@ -70,12 +70,6 @@ function AdminHome() {
         {adminSections.map((section) => {
           const IconComponent = section.icon;
 
-          // Contraste renforcé pour le bouton du module Référentiels
-          const isReferentials = section.path === "/referentials";
-          const buttonClass = isReferentials
-            ? "w-full bg-[hsl(var(--brand-dark))] hover:bg-[hsl(var(--brand-dark))/0.9] text-white font-semibold shadow-md ring-2 ring-purple-200"
-            : `w-full ${section.iconColor.replace('text-', 'bg-')} hover:opacity-90 text-white font-medium`;
-
           return (
             <Card 
               key={section.path}
@@ -107,7 +101,21 @@ function AdminHome() {
                 </div>
                 
                 <Button 
-                  className={buttonClass}
+                  className={`w-full text-white font-semibold shadow-md ${
+                    section.path === "/referentials" 
+                      ? "bg-[hsl(var(--brand-dark))] hover:bg-[hsl(var(--brand-dark))/0.9] ring-2 ring-purple-200"
+                      : section.path === "/admin/updates"
+                        ? "bg-cyan-700 hover:bg-cyan-600"
+                        : section.path === "/admin/tools"
+                          ? "bg-red-600 hover:bg-red-500"
+                          : section.path === "/referentials"
+                            ? "bg-purple-600 hover:bg-purple-500"
+                            : section.path === "/admin/salaries"
+                              ? "bg-blue-600 hover:bg-blue-500"
+                              : section.path === "/admin/references"
+                                ? "bg-green-600 hover:bg-green-500"
+                                : "bg-gray-600 hover:bg-gray-500"
+                  }`}
                   aria-label={`Accéder au module ${section.title}`}
                   onClick={(e) => {
                     e.stopPropagation();
