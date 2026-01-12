@@ -35,6 +35,16 @@ function resolveCol(obj, names) {
   return undefined;
 }
 
+// Parse une chaîne de compétences séparées par ; ou ,
+function parseCompetencesString(str) {
+  if (!str || typeof str !== 'string') return [];
+  // Séparer par ; ou , et nettoyer
+  return str
+    .split(/[;,]/)
+    .map(s => s.trim())
+    .filter(s => s.length > 0);
+}
+
 const registerImportRoutes = (app, { upload }) => {
   // Import références (champ fichier: 'file')
   app.post('/api/import-references', upload.single('file'), async (req, res) => {
@@ -360,14 +370,137 @@ const registerImportRoutes = (app, { upload }) => {
     }
   });
 
-  // Import salariés (.xlsx/.xls/.csv) — champ 'file'
+  // Import compétences (champ fichier: 'xlsx')
+  app.post('/api/import-competences', upload.single('xlsx'), async (req, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ error: "Aucun fichier reçu (champ 'xlsx' requis)" });
+
+      const lower = (req.file.originalname || '').toLowerCase();
+      if (!lower.endsWith('.xlsx') && !lower.endsWith('.xls')) {
+        try { if (req.file.path) fs.unlinkSync(req.file.path); } catch {}
+        return res.status(400).json({ error: 'Le fichier doit être un .xlsx ou .xls' });
+      }
+
+      const wb = new ExcelJS.Workbook();
+      await wb.xlsx.readFile(req.file.path);
+      const ws = wb.worksheets[0];
+      if (!ws) throw new Error('Onglet Excel introuvable');
+
+      const isRowEmpty = (row) => {
+        for (let c = 1; c <= ws.columnCount; c++) {
+          const v = row.getCell(c).value;
+          if (v !== null && v !== undefined && String(v).trim() !== '') return false;
+        }
+        return true;
+      };
+      let headerRowIndex = 1;
+      while (headerRowIndex <= ws.rowCount && isRowEmpty(ws.getRow(headerRowIndex))) headerRowIndex++;
+      if (headerRowIndex > ws.rowCount) throw new Error("Aucune ligne d'en-têtes trouvée");
+
+      const headerRow = ws.getRow(headerRowIndex);
+      const findCol = (names) => {
+        for (let c = 1; c <= ws.columnCount; c++) {
+          const label = String(headerRow.getCell(c).value ?? '').trim().toLowerCase();
+          for (const n of names) if (label === n.toLowerCase()) return c;
+        }
+        return -1;
+      };
+
+      const cNom = findCol(['Competence', 'Compétence', 'Nom']);
+      const cDesc = findCol(['Description']);
+
+      if (cNom === -1) {
+        try { if (req.file.path) fs.unlinkSync(req.file.path); } catch {}
+        return res.status(400).json({ error: "Colonne 'Competence' ou 'Nom' introuvable dans l'Excel" });
+      }
+
+      const getCell = (row, colIdx) => colIdx > -1 ? String(row.getCell(colIdx).value ?? '').trim() : '';
+
+      const stats = { added: 0, existing: 0, errors: 0, count: 0 };
+      for (let r = headerRowIndex + 1; r <= ws.rowCount; r++) {
+        const row = ws.getRow(r);
+        if (isRowEmpty(row)) continue;
+        const nom = getCell(row, cNom);
+        const description = getCell(row, cDesc);
+        if (!nom) { stats.errors++; continue; }
+        const exists = await dbManager.get('SELECT id_competence FROM competences WHERE lower(nom)=lower(?)', [nom]);
+        if (exists) {
+          stats.existing++;
+        } else {
+          try {
+            await dbManager.addCompetence({ nom, description: description || null, actif: 1 });
+            stats.added++;
+          } catch (e) {
+            if (/UNIQUE/i.test(e.message || '')) {
+              stats.existing++;
+            } else {
+              stats.errors++;
+            }
+          }
+        }
+      }
+      stats.count = stats.added + stats.existing;
+
+      try { if (req.file.path) fs.unlinkSync(req.file.path); } catch {}
+
+      res.json(stats);
+    } catch (e) {
+      console.error('❌ import-competences:', e.message);
+      try { if (req.file?.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path); } catch {}
+      res.status(500).json({ error: "Erreur lors de l'import des compétences" });
+    }
+  });
+
+  // Import salariés (.xlsx/.xls/.csv) — champ 'file' — avec gestion des compétences
   app.post('/api/import-salaries', upload.single('file'), async (req, res) => {
     try {
       if (!req.file) return res.status(400).json({ message: "Fichier manquant (champ 'file)." });
 
       const ext = (req.file.originalname || '').toLowerCase();
-      const stats = { total: 0, added: 0, existing: 0, errors: 0 };
+      const stats = { total: 0, added: 0, existing: 0, errors: 0, competencesUpdated: 0, competencesCreated: 0 };
       const errors = [];
+
+      // Charger toutes les compétences existantes pour le mapping nom -> id
+      const allCompetences = await dbManager.getCompetences();
+      const competenceNameToId = {};
+      for (const c of allCompetences) {
+        competenceNameToId[c.nom.toLowerCase().trim()] = c.id_competence;
+      }
+
+      // Fonction pour résoudre les IDs de compétences à partir d'une liste de noms
+      const resolveCompetenceIds = async (competenceNames) => {
+        const ids = [];
+        const newCompetences = [];
+        
+        for (const name of competenceNames) {
+          const normalizedName = name.toLowerCase().trim();
+          if (competenceNameToId[normalizedName]) {
+            ids.push(competenceNameToId[normalizedName]);
+          } else {
+            // Compétence non trouvée, on la crée
+            try {
+              const result = await dbManager.addCompetence({ nom: name.trim(), description: null, actif: 1 });
+              if (result && result.id) {
+                competenceNameToId[normalizedName] = result.id;
+                ids.push(result.id);
+                newCompetences.push(name.trim());
+                stats.competencesCreated++;
+              }
+            } catch (e) {
+              // Si erreur UNIQUE, essayer de récupérer l'ID existant
+              if (/UNIQUE/i.test(e.message || '')) {
+                const existing = await dbManager.get('SELECT id_competence FROM competences WHERE lower(nom)=lower(?)', [name.trim()]);
+                if (existing) {
+                  competenceNameToId[normalizedName] = existing.id_competence;
+                  ids.push(existing.id_competence);
+                }
+              }
+            }
+          }
+        }
+        
+        return { ids, newCompetences };
+      };
 
       const upsertBy = async (row) => {
         const nom = row.nom?.trim();
@@ -378,6 +511,7 @@ const registerImportRoutes = (app, { upload }) => {
         const email = row.email?.trim() || null;
         const telephone = row.telephone?.trim() || null;
         const actif = typeof row.actif === 'boolean' ? row.actif : toBool(row.actif);
+        const competencesStr = row.competences?.trim() || '';
 
         if (!nom || !prenom) {
           stats.errors++;
@@ -407,12 +541,27 @@ const registerImportRoutes = (app, { upload }) => {
           actif: actif !== undefined ? actif : true,
         };
 
+        let salarieId;
         if (!existing) {
-          await dbManager.addSalarie(payload);
+          const result = await dbManager.addSalarie(payload);
+          salarieId = result.id;
           stats.added++;
         } else {
           await dbManager.updateSalarie(existing.id_salarie, payload);
+          salarieId = existing.id_salarie;
           stats.existing++;
+        }
+
+        // Gérer les compétences si la colonne est présente et non vide
+        if (competencesStr && salarieId) {
+          const competenceNames = parseCompetencesString(competencesStr);
+          if (competenceNames.length > 0) {
+            const { ids } = await resolveCompetenceIds(competenceNames);
+            if (ids.length > 0) {
+              await dbManager.replaceSalarieCompetences(salarieId, ids);
+              stats.competencesUpdated++;
+            }
+          }
         }
       };
 
@@ -429,6 +578,7 @@ const registerImportRoutes = (app, { upload }) => {
             email: resolveCol(r, ['Email', 'E-mail']),
             telephone: resolveCol(r, ['Telephone', 'Téléphone', 'Tel']),
             actif: resolveCol(r, ['Actif']),
+            competences: resolveCol(r, ['Competences', 'Compétences', 'Skills']),
           };
           await upsertBy(row);
         }
@@ -471,6 +621,7 @@ const registerImportRoutes = (app, { upload }) => {
         const cEmail = findCol(['Email', 'E-mail']);
         const cTel = findCol(['Telephone', 'Téléphone', 'Tel']);
         const cActif = findCol(['Actif']);
+        const cCompetences = findCol(['Competences', 'Compétences', 'Skills']);
 
         const getCell = (row, colIdx) =>
           colIdx > -1 ? String(row.getCell(colIdx).value ?? '').trim() : undefined;
@@ -489,6 +640,7 @@ const registerImportRoutes = (app, { upload }) => {
             email: getCell(row, cEmail),
             telephone: getCell(row, cTel),
             actif: getCell(row, cActif),
+            competences: getCell(row, cCompetences),
           };
           if (rec.nom || rec.prenom || rec.email) rows.push(rec);
         }
@@ -508,6 +660,8 @@ const registerImportRoutes = (app, { upload }) => {
           salaries_ajoutes: stats.added,
           salaries_existants: stats.existing,
           erreurs: stats.errors,
+          competences_mises_a_jour: stats.competencesUpdated,
+          competences_creees: stats.competencesCreated,
           total_base: (await dbManager.get('SELECT COUNT(*) as c FROM salaries')).c || 0,
         },
         erreurs_detaillees: errors.map((e, i) => ({ ligne: i + 1, erreur: e })),

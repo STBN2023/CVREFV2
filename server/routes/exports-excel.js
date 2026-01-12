@@ -43,7 +43,7 @@ const registerExportRoutes = (app) => {
     }
   });
 
-  // Export salariés (Excel)
+  // Export salariés (Excel) - avec compétences
   app.get('/api/export-salaries', async (_req, res) => {
     try {
       const salaries = await dbManager.getAllSalaries();
@@ -58,10 +58,16 @@ const registerExportRoutes = (app) => {
         { header: 'Niveau_Expertise', key: 'niveau_expertise', width: 22 },
         { header: 'Email', key: 'email', width: 30 },
         { header: 'Telephone', key: 'telephone', width: 18 },
+        { header: 'Competences', key: 'competences', width: 50 },
         { header: 'Actif', key: 'actif', width: 10 },
         { header: 'Date_Creation', key: 'date_creation', width: 22 },
       ];
+
       for (const s of salaries) {
+        // Récupérer les compétences du salarié
+        const competences = await dbManager.getSalarieCompetences(s.id_salarie);
+        const competencesStr = competences.map(c => c.nom).join('; ');
+
         ws.addRow({
           id_salarie: s.id_salarie,
           nom: s.nom || '',
@@ -71,10 +77,12 @@ const registerExportRoutes = (app) => {
           niveau_expertise: s.niveau_expertise || '',
           email: s.email || '',
           telephone: s.telephone || '',
+          competences: competencesStr,
           actif: s.actif ? 1 : 0,
           date_creation: s.date_creation || '',
         });
       }
+
       const buf = await workbook.xlsx.writeBuffer();
       const filename = `salaries_export_${new Date().toISOString().split('T')[0]}.xlsx`;
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
