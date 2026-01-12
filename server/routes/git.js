@@ -1,16 +1,27 @@
 const { exec } = require('child_process');
 const util = require('util');
+const path = require('path');
 const execPromise = util.promisify(exec);
+
+// Répertoire racine du projet (parent de server/)
+const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
+
+// Helper pour exécuter les commandes Git dans le bon répertoire
+const gitExec = (command) => {
+  return execPromise(command, { cwd: PROJECT_ROOT, encoding: 'utf8' });
+};
 
 const registerGitRoutes = (app) => {
   // === GIT STATUS ===
   app.get('/api/admin/git/status', async (_req, res) => {
     try {
-      const branch = await execPromise('git rev-parse --abbrev-ref HEAD');
-      const commit = await execPromise('git rev-parse HEAD');
-      const message = await execPromise('git log -1 --pretty=%B');
-      const date = await execPromise('git log -1 --pretty=%ci');
-      const status = await execPromise('git status --porcelain');
+      console.log('📁 Git working directory:', PROJECT_ROOT);
+      
+      const branch = await gitExec('git rev-parse --abbrev-ref HEAD');
+      const commit = await gitExec('git rev-parse HEAD');
+      const message = await gitExec('git log -1 --pretty=%B');
+      const date = await gitExec('git log -1 --pretty=%ci');
+      const status = await gitExec('git status --porcelain');
       
       res.json({
         currentBranch: branch.stdout.trim(),
@@ -28,34 +39,45 @@ const registerGitRoutes = (app) => {
   // === CHECK UPDATES ===
   app.get('/api/admin/git/check-updates', async (_req, res) => {
     try {
-      // Fetch les dernières infos du remote
-      await execPromise('git fetch origin');
+      console.log('🔄 Checking for updates in:', PROJECT_ROOT);
       
-      const local = await execPromise('git rev-parse HEAD');
+      // Fetch les dernières infos du remote
+      await gitExec('git fetch origin');
+      
+      const local = await gitExec('git rev-parse HEAD');
       
       // Déterminer la branche actuelle pour comparer avec le bon remote
-      const branchResult = await execPromise('git rev-parse --abbrev-ref HEAD');
+      const branchResult = await gitExec('git rev-parse --abbrev-ref HEAD');
       const currentBranch = branchResult.stdout.trim();
       
-      // Essayer origin/main puis origin/master
+      console.log('📌 Current branch:', currentBranch);
+      
+      // Essayer origin/[branche actuelle] puis origin/main puis origin/master
       let remote;
       let remoteBranch = `origin/${currentBranch}`;
       try {
-        remote = await execPromise(`git rev-parse ${remoteBranch}`);
-      } catch {
+        remote = await gitExec(`git rev-parse ${remoteBranch}`);
+        console.log('✅ Found remote branch:', remoteBranch);
+      } catch (err1) {
+        console.log('⚠️ Branch not found:', remoteBranch, '- trying origin/main');
         try {
           remoteBranch = 'origin/main';
-          remote = await execPromise(`git rev-parse ${remoteBranch}`);
-        } catch {
+          remote = await gitExec(`git rev-parse ${remoteBranch}`);
+          console.log('✅ Found remote branch:', remoteBranch);
+        } catch (err2) {
+          console.log('⚠️ Branch not found:', remoteBranch, '- trying origin/master');
           remoteBranch = 'origin/master';
-          remote = await execPromise(`git rev-parse ${remoteBranch}`);
+          remote = await gitExec(`git rev-parse ${remoteBranch}`);
+          console.log('✅ Found remote branch:', remoteBranch);
         }
       }
       
-      const behind = await execPromise(`git rev-list HEAD..${remoteBranch} --count`);
-      const remoteMessage = await execPromise(`git log ${remoteBranch} -1 --pretty=%B`);
+      const behind = await gitExec(`git rev-list HEAD..${remoteBranch} --count`);
+      const remoteMessage = await gitExec(`git log ${remoteBranch} -1 --pretty=%B`);
       
       const behindCount = parseInt(behind.stdout.trim(), 10);
+      
+      console.log('📊 Behind by:', behindCount, 'commits');
       
       res.json({
         hasUpdates: behindCount > 0,
@@ -63,7 +85,8 @@ const registerGitRoutes = (app) => {
         localCommit: local.stdout.trim(),
         latestRemoteCommit: remote.stdout.trim(),
         latestRemoteMessage: remoteMessage.stdout.trim(),
-        remoteBranch
+        remoteBranch,
+        projectRoot: PROJECT_ROOT
       });
     } catch (e) {
       console.error('Check updates error:', e);
@@ -74,27 +97,31 @@ const registerGitRoutes = (app) => {
   // === PULL UPDATES ===
   app.post('/api/admin/git/pull', async (_req, res) => {
     try {
+      console.log('⬇️ Pulling updates in:', PROJECT_ROOT);
+      
       // Déterminer la branche actuelle
-      const branchResult = await execPromise('git rev-parse --abbrev-ref HEAD');
+      const branchResult = await gitExec('git rev-parse --abbrev-ref HEAD');
       const currentBranch = branchResult.stdout.trim();
       
       // Stash les modifications locales si nécessaire
-      const status = await execPromise('git status --porcelain');
+      const status = await gitExec('git status --porcelain');
       const hasLocalChanges = status.stdout.trim().length > 0;
       
       if (hasLocalChanges) {
         console.log('📦 Stashing local changes before pull...');
-        await execPromise('git stash');
+        await gitExec('git stash');
       }
       
       // Pull depuis origin
-      const result = await execPromise(`git pull origin ${currentBranch}`);
+      const result = await gitExec(`git pull origin ${currentBranch}`);
+      
+      console.log('✅ Pull result:', result.stdout);
       
       // Restaurer les modifications locales si elles existaient
       if (hasLocalChanges) {
         try {
           console.log('📦 Restoring stashed changes...');
-          await execPromise('git stash pop');
+          await gitExec('git stash pop');
         } catch (stashError) {
           console.warn('⚠️ Could not restore stashed changes:', stashError.message);
         }
@@ -103,11 +130,10 @@ const registerGitRoutes = (app) => {
       res.json({
         success: true,
         output: result.stdout,
-        message: 'Mises à jour appliquées'
+        message: 'Mises à jour appliquées. Redémarrage en cours...'
       });
       
-      // Optionnel: redémarrer le serveur après un délai
-      // Le process manager (pm2, nodemon) redémarrera le serveur
+      // Redémarrer le serveur après un délai
       setTimeout(() => {
         console.log('🔄 Redémarrage du serveur après mise à jour...');
         process.exit(0);
@@ -124,10 +150,8 @@ const registerGitRoutes = (app) => {
     try {
       const limit = parseInt(req.query.limit) || 10;
       
-      // Format plus simple et robuste pour parser les commits
-      const result = await execPromise(
-        `git log -${limit} --pretty=format:"%H|%s|%an|%ci"`,
-        { encoding: 'utf8' }
+      const result = await gitExec(
+        `git log -${limit} --pretty=format:"%H|%s|%an|%ci"`
       );
       
       const output = result.stdout.trim();
@@ -156,8 +180,8 @@ const registerGitRoutes = (app) => {
   // === GIT INFO (version simplifiée pour le status bar) ===
   app.get('/api/admin/git/info', async (_req, res) => {
     try {
-      const commit = await execPromise('git rev-parse --short HEAD');
-      const branch = await execPromise('git rev-parse --abbrev-ref HEAD');
+      const commit = await gitExec('git rev-parse --short HEAD');
+      const branch = await gitExec('git rev-parse --abbrev-ref HEAD');
       
       res.json({
         shortCommit: commit.stdout.trim(),
@@ -165,6 +189,22 @@ const registerGitRoutes = (app) => {
       });
     } catch (e) {
       res.status(500).json({ error: 'Git non disponible' });
+    }
+  });
+  
+  // === DEBUG: Afficher le répertoire de travail ===
+  app.get('/api/admin/git/debug', async (_req, res) => {
+    try {
+      const remotes = await gitExec('git remote -v');
+      const branches = await gitExec('git branch -a');
+      
+      res.json({
+        projectRoot: PROJECT_ROOT,
+        remotes: remotes.stdout.trim(),
+        branches: branches.stdout.trim()
+      });
+    } catch (e) {
+      res.status(500).json({ error: e.message, projectRoot: PROJECT_ROOT });
     }
   });
 };
