@@ -95,6 +95,9 @@ export default function Referentials() {
   // États pour l'import Excel
   const [importLoading, setImportLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // AJOUT: ref pour import compétences
+  const competenceFileInputRef = useRef<HTMLInputElement>(null);
+  const [importCompetenceLoading, setImportCompetenceLoading] = useState(false);
 
   // Fonction d'import Excel
   const handleImportExcel = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -144,6 +147,58 @@ export default function Referentials() {
       // Reset du input file
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  // AJOUT: Fonction d'import Excel pour les compétences
+  const handleImportCompetencesExcel = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Vérifier l'extension
+    const validExtensions = ['.xlsx', '.xls'];
+    const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
+    if (!validExtensions.includes(fileExtension)) {
+      showError('Veuillez sélectionner un fichier Excel (.xlsx ou .xls)');
+      return;
+    }
+
+    setImportCompetenceLoading(true);
+    
+    try {
+      const formData = new FormData();
+      formData.append('xlsx', file);
+
+      const response = await fetch(`${getBackendUrl()}/api/import-competences`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        showSuccess(
+          `Import terminé ! ${result.added || result.count} nouvelles compétences ajoutées${result.existing ? `, ${result.existing} existantes ignorées` : ''}`
+        );
+        
+        // Recharger les compétences
+        const competencesRes = await fetch(`${getBackendUrl()}/api/competences`);
+        if (competencesRes.ok) {
+          const competencesData = await competencesRes.json();
+          setCompetences(competencesData.competences);
+        }
+      } else {
+        showError(result.error || 'Erreur lors de l\'import');
+      }
+    } catch (error) {
+      console.error('Erreur import:', error);
+      showError('Erreur lors de l\'import du fichier');
+    } finally {
+      setImportCompetenceLoading(false);
+      // Reset du input file
+      if (competenceFileInputRef.current) {
+        competenceFileInputRef.current.value = '';
       }
     }
   };
@@ -738,17 +793,60 @@ export default function Referentials() {
           <h2 className="text-2xl font-semibold text-brand-blue flex items-center gap-2">
             <Puzzle className="mr-2" /> Compétences
           </h2>
-          <Button
-            variant="default"
-            className="rounded-full px-6 py-2 font-bold"
-            onClick={() => {
-              resetCompetenceForm();
-              setEditCompetenceId(null);
-              setOpenCompetence(true);
-            }}
-          >
-            <Plus className="mr-2" /> Ajouter
-          </Button>
+          <div className="flex gap-2 items-center">
+            <Button
+              variant="default"
+              className="rounded-full px-6 py-2 font-bold"
+              onClick={() => {
+                resetCompetenceForm();
+                setEditCompetenceId(null);
+                setOpenCompetence(true);
+              }}
+            >
+              <Plus className="mr-2" /> Ajouter
+            </Button>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                className="rounded-full px-6 py-2 font-bold"
+                onClick={() => competenceFileInputRef.current?.click()}
+                disabled={importCompetenceLoading}
+              >
+                {importCompetenceLoading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-brand-blue mr-2"></div>
+                    Import en cours...
+                  </>
+                ) : (
+                  <>
+                    <FileSpreadsheet className="mr-2" size={16} />
+                    Importer Excel
+                  </>
+                )}
+              </Button>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info size={16} className="text-brand-blue/60 hover:text-brand-blue cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-xs">
+                    <div className="text-sm">
+                      <div className="font-semibold mb-1">Colonnes Excel attendues :</div>
+                      <div><strong>Compétence</strong> ou <strong>Nom</strong> (obligatoire)</div>
+                      <div><strong>Description</strong> (optionnelle)</div>
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <input
+                type="file"
+                ref={competenceFileInputRef}
+                hidden
+                onChange={handleImportCompetencesExcel}
+                accept=".xlsx, .xls"
+              />
+            </div>
+          </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {competences.map((comp) => (
